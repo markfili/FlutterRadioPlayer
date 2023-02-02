@@ -85,7 +85,6 @@ class FlutterRadioPlayerPlugin : FlutterPlugin, ActivityAware, MethodChannel.Met
         Log.i(TAG, "::: Attaching to FRP to FlutterEngine :::")
         this.context = context
         frpChannel = MethodChannel(binaryMessenger, METHOD_CHANNEL_NAME)
-        frpChannel?.setMethodCallHandler(this)
 
         val eventChannel = EventChannel(binaryMessenger, EVENT_CHANNEL_NAME)
         eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
@@ -121,8 +120,10 @@ class FlutterRadioPlayerPlugin : FlutterPlugin, ActivityAware, MethodChannel.Met
                 isBound = false
             }
         }
+        Log.i(TAG, "Binding service...")
+        flutterPluginBinding?.applicationContext?.bindService(serviceIntent, serviceConnection!!, Context.BIND_AUTO_CREATE)
 
-        context.bindService(serviceIntent, serviceConnection!!, Context.BIND_AUTO_CREATE)
+        frpChannel?.setMethodCallHandler(this)
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -153,6 +154,7 @@ class FlutterRadioPlayerPlugin : FlutterPlugin, ActivityAware, MethodChannel.Met
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        Log.i(TAG, ":::: received method call: ${call.method} ::::")
         when (call.method) {
             "init_service" -> {
                 if (isBound) {
@@ -220,7 +222,7 @@ class FlutterRadioPlayerPlugin : FlutterPlugin, ActivityAware, MethodChannel.Met
             }
             "seek_source_to_index" -> {
                 if (!isBound) {
-                    result.error("FRP_008", "Failed to call prev_source", null)
+                    result.error("FRP_008", "Failed to call seek_source_to_index", null)
                     throw FRPException("FRPCoreService has not been initialized yet")
                 }
                 val sourceIndex: Int = call.argument<Int>("source_index") ?: 0
