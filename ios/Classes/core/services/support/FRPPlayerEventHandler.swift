@@ -17,16 +17,13 @@ class FRPPlayerEventHandler: NSObject {
     
     static func handleMetaDataChanges(metaGroup: Array<AVTimedMetadataGroup>) {
         if (FRPCoreService.shared.useIcyData) {
-            metaGroup.first?.items
-                .compactMap({ $0 as AVMetadataItem })
-                .forEach({ meta in
-                    print("Meta details \(meta)")
-                    FRPCoreService.shared.currentMetaData = meta
-                    if let nowPlayingTitle = meta.value {
-                        FRPCoreService.shared.player.nowPlayingInfoController.set(keyValue: MediaItemProperty.albumTitle(nowPlayingTitle as? String))
-                        FRPNotificationUtil.shared.publish(eventData: FRPPlayerEvent(icyMetaDetails: nowPlayingTitle as? String))
-                    }
-            })
+            let metadata  = metaGroup.first?.items ?? []
+            let title = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .commonIdentifierTitle).first?.stringValue ?? ""
+
+            if !title.isEmpty {
+                FRPCoreService.shared.player.nowPlayingInfoController.set(keyValue: MediaItemProperty.albumTitle(title))
+                FRPNotificationUtil.shared.publish(eventData: FRPPlayerEvent(icyMetaDetails: title))
+            }
         }
     }
     
