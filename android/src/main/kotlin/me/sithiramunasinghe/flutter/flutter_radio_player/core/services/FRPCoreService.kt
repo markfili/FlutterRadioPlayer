@@ -10,7 +10,9 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.DefaultLivePlaybackSpeedControl
 import com.google.android.exoplayer2.ExoPlayer
@@ -72,8 +74,7 @@ class FRPCoreService : Service(), PlayerNotificationManager.NotificationListener
         Log.i(TAG, "FlutterRadioPlayerService::onCreate")
 
         // media session
-        mediaSession = MediaSessionCompat(this, mediaSessionId)
-        mediaSession?.isActive = true
+        setupMediaSession()
     }
 
     override fun onDestroy() {
@@ -89,13 +90,15 @@ class FRPCoreService : Service(), PlayerNotificationManager.NotificationListener
             exoPlayer?.removeListener(playerListener!!)
         }
 
+        mediaSession?.isActive = false
         mediaSession?.release()
-
+        mediaSessionConnector?.setClearMediaItemsOnStop(false)
         mediaSessionConnector?.setPlayer(null)
+
         playerNotificationManager?.setPlayer(null)
 
         exoPlayer?.release()
-        exoPlayer == null
+        exoPlayer = null
 
         mediaSessionConnector = null
     }
@@ -155,8 +158,7 @@ class FRPCoreService : Service(), PlayerNotificationManager.NotificationListener
         exoPlayer?.addAnalyticsListener(EventLogger())
 
         if (mediaSession == null) {
-            mediaSession = MediaSessionCompat(this, mediaSessionId)
-            mediaSession?.isActive = true
+            setupMediaSession()
         }
 
         if (mediaSession != null) {
@@ -164,6 +166,31 @@ class FRPCoreService : Service(), PlayerNotificationManager.NotificationListener
             // set connector and player
             mediaSessionConnector = MediaSessionConnector(session)
             mediaSessionConnector?.setPlayer(exoPlayer)
+            mediaSessionConnector?.setMediaMetadataProvider { player ->
+                val builder = MediaMetadataCompat.Builder()
+
+                // Guard against null playback state (the actual crash cause)
+                val playbackState = mediaSession?.controller?.playbackState
+                    ?: return@setMediaMetadataProvider builder.build()
+
+                val mediaItem = player.currentMediaItem
+                    ?: return@setMediaMetadataProvider builder.build()
+
+                builder
+                    .putString(
+                        MediaMetadataCompat.METADATA_KEY_TITLE,
+                        mediaItem.mediaMetadata.title?.toString() ?: ""
+                    )
+                    .putString(
+                        MediaMetadataCompat.METADATA_KEY_ARTIST,
+                        mediaItem.mediaMetadata.artist?.toString() ?: ""
+                    )
+                    .putLong(
+                        MediaMetadataCompat.METADATA_KEY_DURATION,
+                        if (player.duration > 0) player.duration else -1L
+                    )
+                    .build()
+            }
         }
 
         playerNotificationManager?.apply {
@@ -198,6 +225,22 @@ class FRPCoreService : Service(), PlayerNotificationManager.NotificationListener
         Log.i(TAG, ":::: END OF onStartCommand IN SERVICE ::::")
 
         return START_REDELIVER_INTENT
+    }
+
+    private fun setupMediaSession() {
+        mediaSession = MediaSessionCompat(this, mediaSessionId)
+        mediaSession?.setPlaybackState(
+            PlaybackStateCompat.Builder()
+                .setState(PlaybackStateCompat.STATE_NONE, 0L, 1.0f)
+                .setActions(
+                    PlaybackStateCompat.ACTION_PLAY or
+                            PlaybackStateCompat.ACTION_PAUSE or
+                            PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                            PlaybackStateCompat.ACTION_STOP
+                )
+                .build()
+        )
+        mediaSession?.isActive = true
     }
 
     fun setMediaSources(sourceList: List<FRPAudioSource>, playDefault: Boolean = false) {
